@@ -478,14 +478,21 @@ export async function processResponsesStream<TApi extends Api>(
 				output.responseId = response.id;
 			}
 			if (response?.usage) {
-				const cachedTokens = response.usage.input_tokens_details?.cached_tokens || 0;
+				const inputTokensRaw = response.usage.input_tokens || 0;
+				const reportedCachedTokens = response.usage.input_tokens_details.cached_tokens || 0;
+				const cacheWriteRaw = (response.usage.input_tokens_details as unknown as Record<string, unknown>)
+					.cache_write_tokens;
+				const cacheWriteTokens = typeof cacheWriteRaw === "number" ? cacheWriteRaw : 0;
+				const cacheReadTokens =
+					cacheWriteTokens > 0 ? Math.max(0, reportedCachedTokens - cacheWriteTokens) : reportedCachedTokens;
+				const inputTokens = Math.max(0, inputTokensRaw - cacheReadTokens - cacheWriteTokens);
+				const outputTokens = response.usage.output_tokens || 0;
 				output.usage = {
-					// OpenAI includes cached tokens in input_tokens, so subtract to get non-cached input
-					input: (response.usage.input_tokens || 0) - cachedTokens,
-					output: response.usage.output_tokens || 0,
-					cacheRead: cachedTokens,
-					cacheWrite: 0,
-					totalTokens: response.usage.total_tokens || 0,
+					input: inputTokens,
+					output: outputTokens,
+					cacheRead: cacheReadTokens,
+					cacheWrite: cacheWriteTokens,
+					totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 				};
 			}
